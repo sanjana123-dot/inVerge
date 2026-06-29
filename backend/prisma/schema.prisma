@@ -1,0 +1,331 @@
+// INverge – Trust-Based Startup–Investor Platform
+// PostgreSQL schema via Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  FOUNDER
+  INVESTOR
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum RequestIntent {
+  INVESTMENT
+  NETWORKING
+  MENTORSHIP
+}
+
+enum FundingStage {
+  IDEA
+  PRE_SEED
+  SEED
+  SERIES_A
+  SERIES_B
+}
+
+enum Domain {
+  FINTECH
+  HEALTHTECH
+  AI
+  EDTECH
+  CLIMATETECH
+  SAAS
+}
+
+enum NotificationType {
+  CONNECTION_REQUEST
+  REQUEST_ACCEPTED
+  REQUEST_REJECTED
+  ENDORSEMENT_RECEIVED
+  NEW_MESSAGE
+  PROFILE_VIEWED
+  STARTUP_VIEWED
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String   @map("password_hash")
+  name              String
+  role              Role
+  bio               String?
+  profilePicture    String?  @map("profile_picture")
+  skills            String[] @default([])
+  trustScore        Float    @default(0) @map("trust_score")
+  profileCompleteness Float  @default(0) @map("profile_completeness")
+  responseRate      Float    @default(0) @map("response_rate")
+  endorsementScore  Float    @default(0) @map("endorsement_score")
+  activityScore     Float    @default(0) @map("activity_score")
+  investmentInterests String[] @default([]) @map("investment_interests")
+  domains           Domain[] @default([])
+  portfolioPreference String? @map("portfolio_preference")
+  lastLoginAt       DateTime? @map("last_login_at")
+  loginStreak       Int      @default(0) @map("login_streak")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  startup              Startup?
+  refreshTokens        RefreshToken[]
+  sentRequests         ConnectionRequest[] @relation("SentRequests")
+  receivedRequests     ConnectionRequest[] @relation("ReceivedRequests")
+  endorsementsGiven    Endorsement[]       @relation("EndorsementsGiven")
+  endorsementsReceived Endorsement[]       @relation("EndorsementsReceived")
+  notifications        Notification[]
+  messagesSent         Message[]           @relation("MessagesSent")
+  messagesReceived     Message[]           @relation("MessagesReceived")
+  activityLogs         ActivityLog[]
+  trustScoreHistory    TrustScoreHistory[]
+  passwordResets       PasswordReset[]
+  profileViewsMade     ProfileView[] @relation("ProfileViewsMade")
+  profileViewsReceived ProfileView[] @relation("ProfileViewsReceived")
+  startupViews         StartupView[]
+  experiences          Experience[]
+
+  @@index([role])
+  @@index([trustScore])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Startup {
+  id           String       @id @default(cuid())
+  founderId    String       @unique @map("founder_id")
+  startupName  String       @map("startup_name")
+  description  String
+  pitch        String
+  domain       Domain
+  fundingStage FundingStage @map("funding_stage")
+  teamSize     Int          @map("team_size")
+  pitchDeckUrl String?      @map("pitch_deck_url")
+  websiteUrl   String?      @map("website_url")
+  metrics      Json?
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  founder User @relation(fields: [founderId], references: [id], onDelete: Cascade)
+  views   StartupView[]
+
+  @@index([domain])
+  @@index([fundingStage])
+  @@index([createdAt])
+  @@map("startups")
+}
+
+model ConnectionRequest {
+  id         String        @id @default(cuid())
+  senderId   String        @map("sender_id")
+  receiverId String        @map("receiver_id")
+  message    String
+  intent     RequestIntent
+  status     RequestStatus @default(PENDING)
+  respondedAt DateTime?    @map("responded_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  sender   User @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  endorsements Endorsement[]
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+  @@index([senderId, status])
+  @@index([receiverId, createdAt])
+  @@index([senderId, createdAt])
+  @@map("connection_requests")
+}
+
+model Endorsement {
+  id                  String   @id @default(cuid())
+  fromUserId          String   @map("from_user_id")
+  toUserId            String   @map("to_user_id")
+  connectionRequestId String   @map("connection_request_id")
+  message             String
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  fromUser          User                         @relation("EndorsementsGiven", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser            User                         @relation("EndorsementsReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+  connectionRequest ConnectionRequest            @relation(fields: [connectionRequestId], references: [id], onDelete: Cascade)
+  categoryMappings  EndorsementCategoryMapping[]
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId])
+  @@index([toUserId, createdAt])
+  @@index([fromUserId, createdAt])
+  @@index([connectionRequestId])
+  @@map("endorsements")
+}
+
+model EndorsementCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  endorsements EndorsementCategoryMapping[]
+
+  @@map("endorsement_categories")
+}
+
+model EndorsementCategoryMapping {
+  id           String @id @default(cuid())
+  endorsementId String @map("endorsement_id")
+  categoryId   String @map("category_id")
+
+  endorsement Endorsement         @relation(fields: [endorsementId], references: [id], onDelete: Cascade)
+  category    EndorsementCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([endorsementId, categoryId])
+  @@index([categoryId])
+  @@map("endorsement_category_mappings")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String   @map("sender_id")
+  receiverId String   @map("receiver_id")
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  sender   User @relation("MessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("MessagesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([senderId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([receiverId, read])
+  @@map("messages")
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("activity_logs")
+}
+
+model TrustScoreHistory {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  score               Float
+  profileCompleteness Float    @map("profile_completeness")
+  responseRate        Float    @map("response_rate")
+  endorsements        Float
+  activityConsistency Float    @map("activity_consistency")
+  reason              String?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("trust_score_history")
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_resets")
+}
+
+model ProfileView {
+  id           String   @id @default(cuid())
+  viewerId     String   @map("viewer_id")
+  viewedUserId String   @map("viewed_user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  viewer     User @relation("ProfileViewsMade", fields: [viewerId], references: [id], onDelete: Cascade)
+  viewedUser User @relation("ProfileViewsReceived", fields: [viewedUserId], references: [id], onDelete: Cascade)
+
+  @@index([viewedUserId, createdAt])
+  @@index([viewerId, viewedUserId, createdAt])
+  @@map("profile_views")
+}
+
+model StartupView {
+  id        String   @id @default(cuid())
+  viewerId  String   @map("viewer_id")
+  startupId String   @map("startup_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  viewer  User    @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+  startup Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId, createdAt])
+  @@index([viewerId, startupId, createdAt])
+  @@map("startup_views")
+}
+
+model Experience {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  title       String
+  company     String
+  location    String?
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime? @map("end_date")
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startDate])
+  @@map("experiences")
+}
