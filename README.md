@@ -3,9 +3,6 @@
 
 **INverge** redefines how founders and investors connect. Instead of cold outreach and "noise," INverge utilizes a proprietary **Trust Score** system, structured connection requests, and verified endorsements to ensure high-quality, meaningful professional relationships.
 
-![INverge Dashboard](./docs/screenshots/dashboard.png)
-> *Note: Add your dashboard screenshots to `docs/screenshots/` after running the app locally.*
-
 ---
 
 ## ✨ Key Features
